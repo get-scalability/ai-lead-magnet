@@ -1,0 +1,6 @@
+{
+  "dependencies": {},
+  "devDependencies": {
+    "@import-meta-env/unplugin": "^0.6.3"
+  }
+}
