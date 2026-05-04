@@ -1,0 +1,35 @@
+name: Staging Deploy
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+  ci:
+    uses: ./.github/workflows/_ci.yml
+    needs: build
+  refs:
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      short_sha_tag: ${{ steps.compute.outputs.short_sha_tag }}
+    steps:
+      - id: compute
+        run: |
+          echo "short_sha_tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+  publish:
+    uses: ./.github/workflows/_publish.yml
+    needs: [build, ci, refs]
+    with:
+      tag: "${{ needs.refs.outputs.short_sha_tag }}"
+  deploy:
+    uses: ./.github/workflows/_deploy.yml
+    needs: [publish, refs]
+    with:
+      environment: staging
+      version: "${{ needs.refs.outputs.short_sha_tag }}"
+    secrets:
+      DEPLOYMENT_APP_PRIVATE_KEY: ${{ secrets.DEPLOYMENT_APP_PRIVATE_KEY }}

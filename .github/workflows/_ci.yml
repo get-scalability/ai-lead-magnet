@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  workflow_call:
+    inputs:
+      draft:
+        type: boolean
+        default: false
+
+jobs:
+  app-ci:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: ${{ fromJSON(inputs.draft && '["ruff-check","ruff-format","uv-lock-check","ty"]' || '["alembic-check","pytest","ruff-check","ruff-format","uv-lock-check","ty"]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Download app-dev-image artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: app-dev-image
+          path: /tmp
+      - name: Load app-dev image
+        run: |
+          docker load --input /tmp/app-dev.tar
+      - name: Start test PostgreSQL
+        if: ${{ matrix.tool == 'alembic-check' || matrix.tool == 'pytest' }}
+        run: docker compose up --wait postgres
+      - name: Run ${{ matrix.tool }}
+        run: |
+          cat <<EOF > compose.override.yaml
+          services:
+            ci-app-pytest:
+              user: "$(id -u):$(id -g)"
+          EOF
+          docker compose \
+            --profile ci up \
+            --exit-code-from ci-app-${{ matrix.tool }} \
+            --no-build \
+            ci-app-${{ matrix.tool }}
+      - name: Write coverage summary
+        if: ${{ matrix.tool == 'pytest' }}
+        run: cat coverage.md >> $GITHUB_STEP_SUMMARY
+
+  admin-ci:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        tool:
+          - tsc
+          - eslint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Download admin-dev-image artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: admin-dev-image
+          path: /tmp
+      - name: Load admin-dev image
+        run: docker load --input /tmp/admin-dev.tar
+      - name: Run ${{ matrix.tool }}
+        run: |
+          docker compose \
+            --profile ci up \
+            --exit-code-from ci-admin-${{ matrix.tool }} \
+            --no-build \
+            ci-admin-${{ matrix.tool }}

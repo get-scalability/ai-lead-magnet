@@ -1,11 +1,25 @@
-.env
-__pycache__/
+# Python
+__pycache__
 *.py[cod]
-.venv/
-node_modules/
-dist/
-*.egg-info/
-.pytest_cache/
-.ruff_cache/
-coverage.xml
-coverage.md
+
+# Local environment
+/.coverage*
+/.env
+/.envrc
+/coverage.*
+
+# IDEs
+/.idea
+/.metals
+/.vscode
+
+# Misc
+.*.swp
+.DS_Store
+
+
+/admin/dist
+/admin/node_modules
+/admin/package-lock.json
+/compose.override.yaml
+/scripts/test_data/

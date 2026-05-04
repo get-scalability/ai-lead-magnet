@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+env:
+  ECR_REGISTRY: "106875760876.dkr.ecr.eu-west-1.amazonaws.com"
+  ECR_IMAGE_PREFIX: "${{ github.event.repository.name }}"
+
+jobs:
+  # Here we will add approvals (once we are in github enterprise)
+  promote:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: "arn:aws:iam::106875760876:role/github-action"
+          aws-region: "eu-west-1"
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Tag image in ECR
+        run: |
+          prefix="${ECR_REGISTRY}/${ECR_IMAGE_PREFIX}"
+          sha="${{ github.sha }}"
+          short_sha="sha-${sha:0:7}"
+          tag="${{ github.event.release.tag_name }}"
+          version="${tag#v}"
+
+          docker pull "$prefix/app:$short_sha"
+          docker pull "$prefix/admin:$short_sha"
+
+          docker tag "$prefix/app:$short_sha" "$prefix/app:production"
+          docker tag "$prefix/app:$short_sha" "$prefix/app:$version"
+          docker tag "$prefix/admin:$short_sha" "$prefix/admin:production"
+          docker tag "$prefix/admin:$short_sha" "$prefix/admin:$version"
+
+          docker push "$prefix/app:production"
+          docker push "$prefix/app:$version"
+          docker push "$prefix/admin:production"
+          docker push "$prefix/admin:$version"
+  deploy:
+    uses: ./.github/workflows/_deploy.yml
+    needs: promote
+    with:
+      environment: production
+      version: "${{ github.event.release.tag_name }}"
+    secrets:
+      DEPLOYMENT_APP_PRIVATE_KEY: ${{ secrets.DEPLOYMENT_APP_PRIVATE_KEY }}

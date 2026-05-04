@@ -1,0 +1,34 @@
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+    secrets:
+      DEPLOYMENT_APP_PRIVATE_KEY:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Generate a github token
+        id: generate-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.DEPLOYMENT_APP_ID }}
+          private-key: ${{ secrets.DEPLOYMENT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Trigger Deployment workflow on K8s
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          gh workflow run --repo get-scalability/scala-infra deploy.yml \
+            --ref main -f application=ai-agents \
+            -f version="${{ inputs.version }}" \
+            -f environment="${{ inputs.environment }}"

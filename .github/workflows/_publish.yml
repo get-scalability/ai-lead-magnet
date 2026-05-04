@@ -1,0 +1,53 @@
+name: Publish
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+env:
+  ECR_REGISTRY: "106875760876.dkr.ecr.eu-west-1.amazonaws.com"
+  ECR_IMAGE_PREFIX: "${{ github.event.repository.name }}"
+  LOCAL_IMAGE_PREFIX: "${{ github.repository }}"
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: "arn:aws:iam::106875760876:role/github-action"
+          aws-region: "eu-west-1"
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Download app-dist-image artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: app-dist-image
+          path: /tmp
+      - name: Load app-dist image
+        run: |
+          docker load --input /tmp/app-dist.tar
+      - name: Download admin-dist-image artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: admin-dist-image
+          path: /tmp
+      - name: Load admin-dist image
+        run: |
+          docker load --input /tmp/admin-dist.tar
+      - name: Push images to ECR
+        run: |
+          prefix="${ECR_REGISTRY}/${ECR_IMAGE_PREFIX}"
+          tag="${{ inputs.tag }}"
+
+          docker tag "${LOCAL_IMAGE_PREFIX}/app-dist:latest" "$prefix/app:$tag"
+          docker tag "${LOCAL_IMAGE_PREFIX}/admin-dist:latest" "$prefix/admin:$tag"
+
+          docker push --all-tags "$prefix/app"
+          docker push --all-tags "$prefix/admin"
