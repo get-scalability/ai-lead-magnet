@@ -11,8 +11,8 @@
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| LinkedIn company URL | URL | Yes | Signal extraction via HTTP scrape |
-| Company domain | Text | Yes | HTTP scraped for offer/context |
+| Your company domain | Text | Yes | Scraped to understand your offer and ICP — so campaign hooks are relevant to what you sell |
+| Target company domain | Text | Yes | The company you're building campaigns for |
 | Context prompt | Free text | No | "Describe your current outbound situation" — encouraged, improves output quality |
 
 ---
@@ -33,8 +33,9 @@
 
 ### Company context layer (Scala API + domain scrape)
 
-- **Scala API** → company profile, ICP score, known signals
-- **HTTP scrape** of LinkedIn URL + domain → recent activity, growth indicators, tech signals
+- **HTTP scrape** of your domain → extract your offer, ICP, and positioning
+- **Scala API** → target company profile lookup by domain → returns company name, size, industry, ICP score, LinkedIn URL, hiring signals, recent leadership changes, and growth indicators
+- **HTTP scrape** of target domain + LinkedIn page → recent announcements, tech stack hints
 
 ### Hybrid generation
 
@@ -45,7 +46,9 @@ Agent identifies the top-performing historical campaigns matching the company's 
 ## Loading UX (Typewriter Intel)
 
 ```
-🔍 Analyzing your company...
+🔍 Analyzing getscalability.io...
+   → B2B sales intelligence · outbound-focused
+🔍 Looking up acme.io in our database...
    → SaaS · Series B · 120 employees · EU market
 🔍 Searching campaign history...
    → 312 campaigns run for similar companies
@@ -58,7 +61,7 @@ Agent identifies the top-performing historical campaigns matching the company's 
 
 ---
 
-## Output — Up to 8 Campaign Recommendations
+## Output — 5–8 Campaign Recommendations
 
 Per campaign card:
 
@@ -92,9 +95,9 @@ Per campaign card:
 ```json
 {
   "tool_used": "best_campaigns",
-  "tool_input_summary": "domain: acme.io | linkedin: linkedin.com/company/acme",
-  "company_domain": "acme.io",
-  "linkedin_url": "linkedin.com/company/acme",
+  "tool_input_summary": "your domain: getscalability.io | target: acme.io",
+  "company_domain": "getscalability.io",
+  "target_company_domain": "acme.io",
   "context_provided": false,
   "campaigns_generated": 8,
   "notion_export": false
@@ -114,13 +117,7 @@ Output generated from domain scrape + Lemlist benchmarks + Claude. Flagged in ou
 ```
 
 ### Lemlist Data Insufficient (< 5 comparable campaigns found)
-Fall back to Claude + Scalability playbooks. Benchmarks labeled as "industry estimate" instead of "from our campaign history."
-
-### LinkedIn URL Invalid
-```
-❌ "This doesn't look like a company LinkedIn URL.
-    Use the format: linkedin.com/company/your-company"
-```
+Fall back to Claude + Scalability playbooks. Benchmarks labeled as "industry estimate" instead of "from our campaign history." **Minimum 5 campaigns generated in all cases.**
 
 ---
 

@@ -23,14 +23,15 @@ A public-facing platform of 5 AI-powered tools embedded as React widgets on `get
 - Deployment target: TBD (Webflow embed vs. Next.js subdomain `tools.getscalability.io`)
 - **Copy: hardcoded EN/FR in components** (v1) — Notion CMS deferred to v2
 - No authentication required — anonymous first, email gate before agent runs
+- **Desktop-first for v1** — mobile optimization deferred to v2
 
 ### Backend
-- **FastAPI** — new app in `ai-lead-magnet` repo (same stack pattern as `ai-agents`)
-- **5 AI agents** powered by Anthropic Claude (`ANTHROPIC_API_KEY`)
-- **Streaming responses** via Server-Sent Events (SSE) — same pattern as `ai-agents`
+- **FastAPI** — `ai-lead-magnet` repo, simplified stack (no RabbitMQ, no worker, no scheduler)
+- **5 AI agents** powered by Anthropic Claude directly via `anthropic` SDK (`ANTHROPIC_API_KEY`)
+- **Streaming responses** via `sse-starlette` — direct token streaming from Claude to client. No LangGraph, no message queue. Pattern: `POST /agents/{slug}` → `anthropic.messages.stream()` → SSE response
 - **Scala API** (`SCALA_APP_API_URL`) — single source for all company + contact intelligence (ICP scores, profiles, benchmarks, industry data)
-- **PostgreSQL** — rate limiting, shareable link storage, lead run tracking
-- **Pinecone** — semantic search over indexed Lemlist campaign data (Best Campaigns agent)
+- **PostgreSQL** — rate limiting, shareable link storage, lead run tracking (Alembic migrations)
+- **Pinecone** — semantic search over indexed Lemlist campaign data (Best Campaigns agent only)
 - **Gotenberg** — PDF export for Sales Business Plan
 
 ### Data sources (per tool)
@@ -40,7 +41,7 @@ A public-facing platform of 5 AI-powered tools embedded as React widgets on `get
 | Meeting Prep | Scala API + Claude |
 | Company List | Scala API + Claude |
 | Sales Business Plan | Domain HTTP scrape + Scala API + Claude |
-| Best Campaigns | Lemlist PostgreSQL data + Pinecone campaign index + Scala API + Claude |
+| Best Campaigns | User domain scrape + target domain scrape + Scala API + Lemlist PostgreSQL + Pinecone + Claude |
 
 **Linkup: not used.** All intelligence comes from Scala's own data stack.
 
@@ -50,7 +51,7 @@ A public-facing platform of 5 AI-powered tools embedded as React widgets on `get
 - No Redis needed
 
 ### Copywriting framework
-Stored locally in `/Users/yaz/.claude/skills/copywriting-*/` — 1,724 lines of proprietary scoring framework. Powers the Cold Email Review agent directly. No external template library needed.
+1,724 lines of proprietary scoring framework (7 files). Copied into `app/skills/copywriting-*/` at build time and loaded as the system prompt for the Cold Email Review agent. Injected once with Anthropic prompt caching — reused across all runs at 10% input token cost.
 
 ---
 
@@ -77,7 +78,7 @@ Loading UX shown (typewriter intel — see §7)
     ↓
 Full output streamed and rendered
     ↓
-Run counter decremented in PostgreSQL
+Run counter incremented in PostgreSQL
 ```
 
 **Form fields:**
@@ -85,6 +86,11 @@ Run counter decremented in PostgreSQL
 - First name (optional — label: "So we can personalize follow-ups")
 
 **Email validation:** Any valid email accepted. CRM handles quality flagging.
+
+**RGPD consent:** No checkbox. Below the submit button, small grey text:
+> "By getting your results, you'll occasionally hear from Scalability. [Unsubscribe anytime] · [Privacy policy]"
+
+This is implicit consent tied to value delivery — standard practice (HubSpot, Apollo, etc.), RGPD-compliant when opt-out is clearly accessible.
 
 **Rate limit enforcement (PostgreSQL):**
 - Default: **3 free runs per email per month** (all tools except Sales Plan)
@@ -169,7 +175,7 @@ During agent generation (10–30s), the UI displays a live typewriter feed of wh
 | Cold Email Review | Analyzing your domain → Evaluating email structure → Scoring 11 dimensions → Rewriting |
 | Meeting Prep | Analyzing your domain → Looking up [company] → Pulling benchmarks → Building briefing |
 | Company List | Parsing your ICP → Searching Scala API → Scoring + filtering → Ranking 50 accounts |
-| Sales Business Plan | Analyzing [company] → Pulling industry benchmarks → Building financial model → Calculating deliverability |
+| Sales Business Plan | Looking up your company → Pulling industry benchmarks → Building financial model → Calculating deliverability |
 | Best Campaigns | Finding similar campaigns → Analyzing performance patterns → Detecting signals → Customizing angles |
 
 If a step fails: `⚠️ Limited data — continuing with available signals` and agent proceeds with fallback.
@@ -273,7 +279,7 @@ Each card: tool name, one-line description, persona tag, "Try free →" CTA.
 ## 12. V1 Build Order (Solo, ASAP)
 
 ### Week 1 — Company List
-**Why first:** Core Scala API + Pinecone pipeline built here is reused by Meeting Prep and Best Campaigns. Infrastructure (gate, CRM push, SSE streaming, shareable link, PostgreSQL rate limiting) built once and reused by all tools.
+**Why first:** Core Scala API pipeline, SSE streaming, email gate, and PostgreSQL rate limiting built here are reused by all subsequent tools. Infrastructure (gate, CRM push, SSE streaming, shareable link, PostgreSQL rate limiting) built once and reused by all tools.
 
 Deliverables:
 - FastAPI backend + SSE streaming
@@ -292,7 +298,7 @@ Deliverables:
 - Scala API queries for industry benchmarks
 - Deliverability calculator logic
 - Gotenberg PDF generation + branded template
-- LinkedIn + domain HTTP scrape
+- Domain HTTP scrape (LinkedIn URL resolved via Scala API profile lookup)
 - Structured output sections (streaming → cards)
 
 ### Week 3 — Best Campaigns
@@ -328,7 +334,7 @@ Deliverables (Cold Email Review):
 | Lemlist Pinecone index: needs to be created in ai-lead-magnet or shared with ai-agents? | Architecture decision |
 | Charles Trenot's Sales Business Plan doc — deliverability reference values | Yazid to provide |
 | LinkedIn Ad UTM naming convention | TBD with marketing |
-| RGPD: privacy policy link + consent text on gate form | Legal / marketing |
+| RGPD: privacy policy link + consent text on gate form | ✅ Resolved — implicit consent copy below submit button (see §3) |
 
 ---
 

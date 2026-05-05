@@ -11,7 +11,7 @@
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| Your domain | Text | Yes | Agent scrapes it to understand your offer and positioning |
+| Your company domain | Text | Yes | Agent scrapes it to understand your offer and positioning |
 | Target company domain | Text | Yes | The company you're preparing to meet |
 
 ---
@@ -19,7 +19,7 @@
 ## Processing
 
 1. **HTTP scrape** of user's domain → extract their offer, ICP, positioning
-2. **Scala API** → target company profile, ICP score, contacts, signals
+2. **Scala API** → target company profile, ICP score, signals, and real contacts with actual roles — personas are populated from real people, not inferred archetypes
 3. **Claude** → synthesizes everything into personas + tailored leverage recommendations
 
 **Fallback:** If target company not found via Scala API → output generated from domain scrape + Claude knowledge only, with data quality badge.
@@ -71,17 +71,6 @@ Concrete examples:
 - "They hired 12 SDRs in Q1 → mention list quality and ramp time"
 - "New VP Sales joined 6 weeks ago → they're building a new playbook, timing is perfect"
 - "They use Outreach → reference your integration or differentiation vs. their current stack"
-
----
-
-## Teaser (visible before email gate)
-
-*Note: with email-first model, teaser is shown only if returning user hits rate limit.*
-
-| | Content |
-|-|---------|
-| ✅ Visible | Persona roles (no detail) + 3 company insights (no leverage reco) |
-| 🔒 Blurred | Full persona detail + "How to leverage this" + talking points |
 
 ---
 

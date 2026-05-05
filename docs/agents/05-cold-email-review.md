@@ -108,6 +108,8 @@ For each ⚠️ or ❌ dimension:
 - Why it hurts performance
 - Specific fix suggestion
 
+Quality checks (binary flags) are folded here as ❌ items — same format, listed after scored dimensions.
+
 ### Rewritten Email
 Full rewrite with every fix applied:
 - Subject line (≤ 6 words, lowercase)
@@ -158,6 +160,18 @@ Full rewrite with every fix applied:
 ⚠️ "Your email seems very short. Paste your full email
     including subject line for the best review."
 ```
+
+---
+
+## Technical Notes
+
+### Copywriting Framework Injection
+
+The full framework (1,724 lines across 7 skills files) is injected as the **system prompt** on every run. Since the framework is identical across all email reviews, Anthropic's **prompt caching** applies automatically: the first run writes the cache, every subsequent run reads it at 10% of normal input token cost. No selective injection or two-pass scoring needed — simplicity wins.
+
+- System prompt: full framework (copywriting-analyzer + copywriting-refiner + all sequence variants)
+- Human turn: user's email + domain scrape output
+- Prompt cache TTL: 5 minutes (warm) — with 500 target runs, cache hit rate will be very high
 
 ---
 

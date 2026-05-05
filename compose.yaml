@@ -3,7 +3,7 @@ x-api-dev: &app-dev
     context: ./
     dockerfile: ./Dockerfile
     target: app-dev
-  image: get-scalability/ai-agents/app-dev
+  image: get-scalability/ai-lead-magnet/app-dev
   stdin_open: true
   tty: true
   volumes:
@@ -16,81 +16,28 @@ x-app-ci: &app-ci
     - path: .env.template
 
 x-admin-ci: &admin-ci
-  image: get-scalability/ai-agents/admin-dev
+  image: get-scalability/ai-lead-magnet/admin-dev
   volumes:
     - ./admin:/app
 
-x-app-runnable: &app-runnable
-  <<: *app-dev
-  restart: always
-  environment:
-    MCP_SCALA_CRM_URL: http://mcp-crm:8000/mcp
-    MCP_SCALA_DB_URL: http://mcp-scala-db:8000/mcp
-
-x-mcp-server: &mcp-server
-  <<: *app-dev
-  restart: always
-  env_file:
-    - path: .env
-      required: false
-
 services:
-  admin:
-    build:
-      context: ./admin
-      dockerfile: ./Dockerfile
-      target: dev
-    image: get-scalability/ai-agents/admin-dev
-    environment:
-      - API_PROXY_TARGET=http://api:8000
-      - KINDE_DOMAIN=${KINDE_DOMAIN:-}
-      - KINDE_CLIENT_ID=${KINDE_CLIENT_ID:-}
-    ports:
-      - "${ADMIN_PORT:-9601}:5173"
-    volumes:
-      - ./admin:/app
-      - node_modules:/app/node_modules
-    profiles:
-      - ""
-
   api:
-    <<: *app-runnable
+    <<: *app-dev
+    restart: always
     command: >-
       uvicorn app.api_main:app --reload --host 0.0.0.0
       --reload-dir app
       --reload-include '*.md'
     depends_on:
-      rabbitmq:
+      postgres:
         condition: service_healthy
     ports:
       - "${API_PORT:-9602}:8000"
     profiles:
       - ""
 
-  scheduler:
-    <<: *app-runnable
-    command: uvicorn app.scheduler_main:app --host 0.0.0.0
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    profiles:
-      - ""
-
-  worker:
-    <<: *app-runnable
-    command: >-
-      uvicorn app.worker_main:app --reload --host 0.0.0.0
-      --reload-dir app
-      --reload-include '*.md'
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    profiles:
-      - ""
-
   ci-app-alembic-check:
     <<: *app-ci
-    # Make sure all alembic migrations have been generated
     command:
       - /bin/sh
       - -c
@@ -124,12 +71,6 @@ services:
     profiles:
       - "ci"
 
-  ci-app-ty:
-    <<: *app-ci
-    command: ty check
-    profiles:
-      - "ci"
-
   ci-app-uv-lock-check:
     <<: *app-ci
     command: uv lock --check
@@ -148,35 +89,6 @@ services:
     profiles:
       - "ci"
 
-  # Dummy service used to trigger the dist build in dev
-  app-dist:
-    build:
-      context: ./
-      dockerfile: ./Dockerfile
-      target: app-dist
-    image: get-scalability/ai-agents/app-dist
-    command: /bin/cat -
-    profiles:
-      - "dist-build"
-
-  mcp-scala-db:
-    <<: *mcp-server
-    command: >-
-      uvicorn mcp_servers.scala_db.server:app --reload --host 0.0.0.0
-      --reload-dir mcp_servers
-      --reload-dir app
-    ports:
-      - "${MCP_SCALA_DB_PORT:-9604}:8000"
-
-  mcp-crm:
-    <<: *mcp-server
-    command: >-
-      uvicorn mcp_servers.crm.server:app --reload --host 0.0.0.0
-      --reload-dir mcp_servers
-      --reload-dir app
-    ports:
-      - "${MCP_CRM_PORT:-9605}:8000"
-
   gotenberg:
     image: gotenberg/gotenberg:8
     profiles:
@@ -185,11 +97,11 @@ services:
   postgres:
     command: -c 'max_connections=500'
     environment:
-      POSTGRES_DB: ai_agents
+      POSTGRES_DB: ai_lead_magnet
       POSTGRES_PASSWORD: scala_password
       POSTGRES_USER: scala_user
     healthcheck:
-      test: pg_isready -U scala_user -d ai_agents
+      test: pg_isready -U scala_user -d ai_lead_magnet
       interval: 3s
       timeout: 3s
       retries: 5
@@ -199,24 +111,5 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  rabbitmq:
-    image: rabbitmq:4-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: scala_user
-      RABBITMQ_DEFAULT_PASS: scala_password
-    healthcheck:
-      test: rabbitmq-diagnostics -q check_running
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "${RABBITMQ_MGMT_PORT:-9603}:15672"
-    profiles:
-      - ""
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-
 volumes:
-  node_modules:
   postgres_data:
-  rabbitmq_data:

@@ -11,7 +11,7 @@
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| Your domain | Text | Yes | Used to infer your ICP (e.g. `getscalability.io`) |
+| Your company domain | Text | Yes | Used to infer your ICP (e.g. `getscalability.io`) |
 | Target prompt | Free text | Yes | Describe your target (e.g. "B2B SaaS in France, 50–500 employees, Series A/B") |
 
 ---
@@ -43,8 +43,8 @@
 
 ## Output — Simple Table (v1)
 
-| Company | Domain | ICP Score | Industry | Size | Why Selected |
-|---------|--------|-----------|----------|------|-------------|
+| Company | Domain | ICP Score | Industry | Size |
+|---------|--------|-----------|----------|------|
 
 **Table features (v1):**
 - Default sort: ICP score descending
@@ -55,12 +55,14 @@
 
 ---
 
-## Teaser (before email gate)
+## Result Permalink / Rate Limit View
+
+Shown when a visitor arrives via a shared result link, or when a returning user has hit their monthly run limit.
 
 | | Content |
 |-|---------|
 | ✅ Visible | First 10 companies fully rendered |
-| 🔒 Blurred | Rows 11–50 with badge: "40 more companies hidden" |
+| 🔒 Blurred | Rows 11–50 with badge: "40 more companies hidden — run your own search to unlock" |
 
 ---
 

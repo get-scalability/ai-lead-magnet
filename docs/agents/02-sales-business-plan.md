@@ -11,8 +11,7 @@
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| LinkedIn company URL | URL | Yes | Used for company name + signal extraction via HTTP scrape |
-| Company domain | Text | Yes | HTTP scraped for offer and context |
+| Your company domain | Text | Yes | Your own domain — we'll build your outbound sales plan based on your current size and market (e.g. `acme.io`) |
 | Context prompt | Free text | No | "Describe your situation or ask for something specific" — hint: "Add context for a more precise plan — e.g. current team size, ARR, specific challenge" |
 
 Agent infers: industry, team size, growth stage, funding. If data is limited, Claude flags it explicitly in the output.
@@ -21,18 +20,19 @@ Agent infers: industry, team size, growth stage, funding. If data is limited, Cl
 
 ## Processing
 
-1. **HTTP scrape** of LinkedIn company page + domain → extract company name, size, industry, recent signals
-2. **Scala API** → industry benchmarks, comparable company data
-3. **Claude** → generates full-funnel sales plan using Scalability's playbooks + benchmarks
+1. **Scala API** → company profile lookup by domain → returns company name, size, industry, and growth stage
+2. **HTTP scrape** of domain → extract offer, positioning, ICP context
+3. **Scala API** → industry benchmarks, comparable company data
+4. **Claude** → generates full-funnel sales plan using Scalability's playbooks + benchmarks
 
 ---
 
 ## Loading UX (Typewriter Intel)
 
 ```
-🔍 Analyzing your LinkedIn page...
+🔍 Looking up acme.io in our database...
    → SaaS · 45 employees · Series A detected
-🔍 Scraping domain context...
+🔍 Scraping website...
    → Outbound-focused · SMB market · EU region
 🔍 Pulling industry benchmarks...
    → 89 comparable companies found in our database
@@ -101,9 +101,8 @@ Step-by-step actionable setup:
 ```json
 {
   "tool_used": "sales_business_plan",
-  "tool_input_summary": "domain: acme.io | linkedin: linkedin.com/company/acme",
+  "tool_input_summary": "domain: acme.io",
   "company_domain": "acme.io",
-  "linkedin_url": "linkedin.com/company/acme",
   "context_provided": true,
   "run_type": "lifetime"
 }
@@ -112,12 +111,6 @@ Step-by-step actionable setup:
 ---
 
 ## Error Handling
-
-### LinkedIn URL Invalid / Not a Company Page
-```
-❌ "This doesn't look like a company LinkedIn URL.
-    Use the format: linkedin.com/company/your-company"
-```
 
 ### Company Not Found via Scala API
 Agent continues. Output is generated from domain scrape + Claude inference. Flagged in output:
