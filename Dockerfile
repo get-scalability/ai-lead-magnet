@@ -22,7 +22,7 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/usr/local/venv
 
-# Install non-dev dependencies (snowflake-connector-python needs build tools)
+# Install non-dev dependencies (psycopg binary needs build tools)
 RUN --mount=from=uv-base,source=/uv,target=/bin/uv \
     --mount=type=cache,id=uv-$TARGETARCH,target=/root/.cache/uv \
     --mount=type=cache,id=apk-$TARGETARCH,sharing=locked,target=/var/cache/apk \
@@ -94,8 +94,6 @@ EXPOSE 8080
 FROM app-base AS app-dist
 
 COPY app/ /app/app/
-COPY mcp_servers/ /app/mcp_servers/
-COPY scripts/ /app/scripts/
 COPY alembic.ini /app/
 
 USER web

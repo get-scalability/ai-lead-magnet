@@ -106,6 +106,8 @@ services:
       timeout: 3s
       retries: 5
     image: postgres:18.3-alpine
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
     profiles:
       - ""
     volumes:
