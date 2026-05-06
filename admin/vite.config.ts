@@ -12,13 +12,17 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': {
-        target: apiProxyTarget,
+      '/agents': {
         changeOrigin: true,
+        target: apiProxyTarget,
+      },
+      '/api': {
+        changeOrigin: true,
+        target: apiProxyTarget,
       },
       '/auth': {
-        target: apiProxyTarget,
         changeOrigin: true,
+        target: apiProxyTarget,
       },
     },
   },

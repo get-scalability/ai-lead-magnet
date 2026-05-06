@@ -44,9 +44,12 @@ _ICP_PARAMS_TOOL: dict[str, Any] = {
             "semantic_query": {
                 "type": "string",
                 "description": (
-                    "A descriptive paragraph (2-4 sentences) about the TARGET companies "
-                    "the seller wants to find. Describe what these companies do, their "
-                    "industry, typical size, and why they would need what the seller offers. "
+                    "MUST be written in English. "
+                    "A concise profile (2-3 sentences) of the TARGET companies — what they "
+                    "are, what industry they operate in, their typical size and business model. "
+                    "Focus on what these companies DO and what they ARE, not what they need. "
+                    "Example: 'Mid-sized B2B SaaS company providing project management software "
+                    "to enterprises. Typical size 50-200 employees, primarily in Europe.' "
                     "NEVER describe the seller's own company here."
                 ),
             },
@@ -62,9 +65,25 @@ _ICP_PARAMS_TOOL: dict[str, Any] = {
                 "type": "integer",
                 "description": "Maximum employee count. Only if explicitly specified.",
             },
-            "industry": {
-                "type": "string",
-                "description": "LinkedIn industry name (e.g. 'computer software'). Be specific.",
+            "industries": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "One or more LinkedIn industry values to filter on (OR logic). "
+                    "Only use when the user specifies a clear industry. "
+                    "For broad categories like 'SaaS' or 'tech', omit this field and rely "
+                    "on the semantic_query instead. "
+                    "Valid values (use exactly as written): "
+                    "'Software Development', 'IT Services and IT Consulting', "
+                    "'Information Technology and Services', "
+                    "'Technology, Information and Internet', "
+                    "'Business Consulting and Services', 'Financial Services', "
+                    "'Marketing Services', 'Advertising Services', "
+                    "'Health, Wellness and Fitness', 'Hospitals and Health Care', "
+                    "'Manufacturing', 'Industrial Machinery Manufacturing', "
+                    "'Staffing and Recruiting', 'E-Learning Providers', "
+                    "'Professional Services'."
+                ),
             },
             "hiring": {
                 "type": "boolean",
@@ -95,16 +114,16 @@ async def _extract_icp_params(domain_context: str, icp_prompt: str) -> dict[str,
             {
                 "role": "user",
                 "content": (
-                    "VENDEUR (contexte — comprendre ce qu'il vend, pas ce qu'il cherche) :\n"
-                    f"{domain_context or 'Non disponible'}\n\n"
-                    "CIBLE (description ICP fournie par le vendeur — ce sont les entreprises "
-                    "à trouver, pas le vendeur lui-même) :\n"
+                    "SELLER CONTEXT (understand what they sell, not what they're looking for):\n"
+                    f"{domain_context or 'Not available'}\n\n"
+                    "TARGET ICP (provided by the seller — these are the companies to find, "
+                    "not the seller):\n"
                     f"{icp_prompt}\n\n"
-                    "Extrais les paramètres de recherche pour trouver des entreprises CIBLES.\n"
-                    "Le semantic_query doit décrire les entreprises CIBLES (acheteurs potentiels), "
-                    "jamais le vendeur lui-même. "
-                    "Utilise le contexte vendeur uniquement pour mieux comprendre son offre "
-                    "et donc identifier qui serait un bon acheteur."
+                    "Extract search parameters to find TARGET companies.\n"
+                    "The semantic_query MUST be written in English and describe the TARGET "
+                    "companies (what they are and what they do), never the seller. "
+                    "Use the seller context only to better understand their offer and identify "
+                    "who would be a good buyer."
                 ),
             }
         ],
@@ -118,7 +137,7 @@ async def _extract_icp_params(domain_context: str, icp_prompt: str) -> dict[str,
 def _build_pinecone_filter(  # noqa: PLR0913
     *,
     country: str | None = None,
-    industry: str | None = None,
+    industries: list[str] | None = None,
     min_employees: int | None = None,
     max_employees: int | None = None,
     hiring: bool | None = None,
@@ -127,8 +146,8 @@ def _build_pinecone_filter(  # noqa: PLR0913
     f: dict[str, Any] = {}
     if country:
         f["country"] = country
-    if industry:
-        f["industry"] = industry
+    if industries:
+        f["industry"] = {"$in": industries}
     if min_employees is not None or max_employees is not None:
         emp: dict[str, int] = {}
         if min_employees is not None:
@@ -237,7 +256,7 @@ async def run(
 
     metadata_filter = _build_pinecone_filter(
         country=params.get("country"),
-        industry=params.get("industry"),
+        industries=params.get("industries"),
         min_employees=params.get("min_employees"),
         max_employees=params.get("max_employees"),
         hiring=params.get("hiring"),
@@ -348,6 +367,6 @@ def _build_broaden_suggestions(params: dict[str, Any]) -> list[dict[str, str]]:
         suggestions.append({"label": "Remove size filter →", "hint": "~+18 more companies"})
     if params.get("country"):
         suggestions.append({"label": "Expand to more countries →", "hint": "~+25 more companies"})
-    if params.get("industry"):
+    if params.get("industries"):
         suggestions.append({"label": "Broaden industry criteria →", "hint": "~+12 more companies"})
     return suggestions[:3]
