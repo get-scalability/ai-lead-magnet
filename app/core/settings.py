@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     SCALA_APP_API_KEY: SecretStr
     SCALA_APP_API_URL: str = "https://api.getscalability.io/"
+    SCALA_TENANT_ID: str = "scalability"
     SCALA_CRM_API_URL: str = "https://crm.getscalability.io/"
 
 
