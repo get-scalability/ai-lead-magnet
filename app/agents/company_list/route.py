@@ -1,11 +1,14 @@
 """SSE endpoint for the Company List agent."""
 
 from collections.abc import AsyncGenerator
+import csv
+import io
 import json
 from typing import Annotated
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -106,3 +109,41 @@ async def get_result(public_id: str, db: Annotated[AsyncSession, Depends(get_db)
         "output": row.output_data,
         "created_at": row.created_at.isoformat(),
     }
+
+
+_CSV_COLUMNS = ["name", "domain", "linkedin_url", "industry", "size", "country", "icp_score"]
+
+
+@router.get("/result/{public_id}/csv")
+async def get_result_csv(
+    public_id: str, db: Annotated[AsyncSession, Depends(get_db)]
+) -> StreamingResponse:
+    try:
+        uid = uuid.UUID(public_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid public_id") from None
+
+    row = await db.scalar(
+        select(LeadMagnetResult).where(
+            LeadMagnetResult.public_id == uid,
+            LeadMagnetResult.tool_slug == TOOL_SLUG,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Result not found")
+
+    companies: list[dict] = row.output_data.get("companies", [])
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(
+        buf, fieldnames=_CSV_COLUMNS, extrasaction="ignore", lineterminator="\n"
+    )
+    writer.writeheader()
+    writer.writerows(companies)
+
+    filename = f"company-list-{public_id[:8]}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
