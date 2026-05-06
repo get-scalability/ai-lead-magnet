@@ -1,225 +1,228 @@
-"""Company List agent — ICP filter extraction + Scala search + Claude scoring."""
+"""Company List agent — semantic search via Pinecone + Snowflake enrichment.
 
-import json
+Search pipeline:
+  1. Scrape user's domain → understand what the SELLER offers (context only)
+  2. Claude Haiku extracts ICP params: semantic_query (TARGET companies) + optional filters
+  3. Pinecone semantic search on scala-db/companies namespace
+  4. Filter results below minimum relevance score
+  5. Snowflake enrichment by company_key (name, domain, LinkedIn URL, etc.)
+  6. Return top 50 sorted by Pinecone score
+
+CRITICAL: The user's domain is seller context only. The semantic_query MUST describe
+TARGET companies (buyers), never the seller's own company.
+"""
+
 from collections.abc import AsyncGenerator
+import json
 from typing import Any
 
 import anthropic
 import structlog
 
 from app.core.http import scrape_domain
-from app.core.scala_api import search_companies
+from app.core.pinecone_client import search_companies as pinecone_search
 from app.core.settings import settings
+from app.core.snowflake import get_pool
 
 
 logger = structlog.get_logger()
 
 _anthropic = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY.get_secret_value())
 
-_FILTER_TOOL: dict[str, Any] = {
-    "name": "set_search_filters",
+_MIN_SEMANTIC_SCORE = 0.35
+_TOP_N = 50
+
+_ICP_PARAMS_TOOL: dict[str, Any] = {
+    "name": "set_icp_params",
     "description": (
-        "Set structured company search filters based on the user's ICP description. "
-        "Use ISO 3166-1 alpha-2 codes for countries (e.g. 'fr', 'us', 'de'). "
-        "For company_linkedin_industries use exact LinkedIn industry names. "
-        "Leave a filter absent (do not include the key) if it should not be applied."
+        "Extract search parameters to find TARGET companies matching the seller's ICP. "
+        "The semantic_query MUST describe the TARGET companies (buyers), never the seller."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "company_linkedin_industries": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "LinkedIn industry names, e.g. ['computer software', 'information technology and services']",
-            },
-            "company_gpt_industries": {
-                "type": "array",
-                "items": {
-                    "type": "string",
-                    "enum": [
-                        "Cybersecurity",
-                        "Energy",
-                        "Fintech",
-                        "Medical equipment",
-                        "Miscellaneous",
-                        "Salestech & Martech",
-                        "Sport",
-                        "Technology",
-                        "Travel",
-                    ],
-                },
+            "semantic_query": {
+                "type": "string",
                 "description": (
-                    "GPT-classified industry from a fixed list. "
-                    "'Technology' covers SaaS/software/IT. "
-                    "'Salestech & Martech' covers sales/marketing tools. "
-                    "Leave unset to search across all industries."
+                    "A descriptive paragraph (2-4 sentences) about the TARGET companies "
+                    "the seller wants to find. Describe what these companies do, their "
+                    "industry, typical size, and why they would need what the seller offers. "
+                    "NEVER describe the seller's own company here."
                 ),
             },
-            "company_country_codes": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "ISO-2 country codes, e.g. ['fr', 'be', 'ch']",
+            "country": {
+                "type": "string",
+                "description": "ISO-2 country code (e.g. 'FR', 'US'). Only if explicitly set.",
             },
-            "company_employee_count_min": {
+            "min_employees": {
                 "type": "integer",
-                "description": "Minimum employee count",
+                "description": "Minimum employee count. Only if explicitly specified.",
             },
-            "company_employee_count_max": {
+            "max_employees": {
                 "type": "integer",
-                "description": "Maximum employee count",
+                "description": "Maximum employee count. Only if explicitly specified.",
             },
-            "company_linkedin_keywords": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Keywords to match against company LinkedIn description/specialties",
+            "industry": {
+                "type": "string",
+                "description": "LinkedIn industry name (e.g. 'computer software'). Be specific.",
             },
-            "company_is_hiring": {
+            "hiring": {
                 "type": "boolean",
-                "description": "Filter to companies that are actively hiring",
+                "description": "True to filter to companies actively hiring.",
             },
-            "company_headcount_increased": {
+            "headcount_increasing": {
                 "type": "boolean",
-                "description": "Filter to companies whose headcount increased recently",
+                "description": "True to filter to companies with growing headcount.",
             },
         },
-        "required": [],
-    },
-}
-
-_SCORE_TOOL: dict[str, Any] = {
-    "name": "rank_companies",
-    "description": "Rank companies by ICP fit. Assign a score 0–100 per company (100 = perfect ICP match).",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "rankings": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "company_key": {"type": "string"},
-                        "icp_score": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 100,
-                        },
-                    },
-                    "required": ["company_key", "icp_score"],
-                },
-            }
-        },
-        "required": ["rankings"],
+        "required": ["semantic_query"],
     },
 }
 
 
-async def _extract_filters(domain_context: str, icp_prompt: str) -> dict[str, Any]:
-    """Ask Claude to convert ICP prompt + domain context into Scala search filters."""
+async def _extract_icp_params(domain_context: str, icp_prompt: str) -> dict[str, Any]:
+    """Convert ICP prompt + seller context into a semantic query + optional Pinecone filters.
+
+    The prompt explicitly separates SELLER context from TARGET description so Claude
+    never confuses the two and never generates a look-alike query for the seller's domain.
+    """
     msg = await _anthropic.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=512,
-        tools=[_FILTER_TOOL],
-        tool_choice={"type": "tool", "name": "set_search_filters"},
+        tools=[_ICP_PARAMS_TOOL],  # type: ignore[arg-type]
+        tool_choice={"type": "tool", "name": "set_icp_params"},
         messages=[
             {
                 "role": "user",
                 "content": (
-                    f"The user's company context (from their website):\n{domain_context or 'Not available'}\n\n"
-                    f"Their target ICP description:\n{icp_prompt}\n\n"
-                    "Extract company search filters. Be precise — overly broad filters return noise."
+                    "VENDEUR (contexte — comprendre ce qu'il vend, pas ce qu'il cherche) :\n"
+                    f"{domain_context or 'Non disponible'}\n\n"
+                    "CIBLE (description ICP fournie par le vendeur — ce sont les entreprises "
+                    "à trouver, pas le vendeur lui-même) :\n"
+                    f"{icp_prompt}\n\n"
+                    "Extrais les paramètres de recherche pour trouver des entreprises CIBLES.\n"
+                    "Le semantic_query doit décrire les entreprises CIBLES (acheteurs potentiels), "
+                    "jamais le vendeur lui-même. "
+                    "Utilise le contexte vendeur uniquement pour mieux comprendre son offre "
+                    "et donc identifier qui serait un bon acheteur."
                 ),
             }
         ],
     )
     for block in msg.content:
-        if block.type == "tool_use" and block.name == "set_search_filters":
-            return block.input  # type: ignore[return-value]
-    return {}
+        if block.type == "tool_use" and block.name == "set_icp_params":
+            return block.input
+    return {"semantic_query": icp_prompt}
 
 
-async def _score_companies(
-    companies: list[dict[str, Any]],
-    icp_prompt: str,
-    domain_context: str,
-) -> list[dict[str, Any]]:
-    """Ask Claude to score each company 0–100 for ICP fit, then sort descending."""
-    company_lines = []
-    for c in companies:
-        line = (
-            f"{c.get('company_key', '')} | "
-            f"{c.get('cleaned_name') or c.get('name', '?')} | "
-            f"{c.get('domain', '?')} | "
-            f"{c.get('gpt_industry') or c.get('linkedin_industry', '?')} | "
-            f"{c.get('employees_range') or c.get('employees_count', '?')} | "
-            f"{c.get('country_code', '?')}"
-        )
-        if c.get("gpt_description"):
-            line += f" | {c['gpt_description'][:120]}"
-        company_lines.append(line)
+def _build_pinecone_filter(  # noqa: PLR0913
+    *,
+    country: str | None = None,
+    industry: str | None = None,
+    min_employees: int | None = None,
+    max_employees: int | None = None,
+    hiring: bool | None = None,
+    headcount_increasing: bool | None = None,
+) -> dict[str, Any] | None:
+    f: dict[str, Any] = {}
+    if country:
+        f["country"] = country
+    if industry:
+        f["industry"] = industry
+    if min_employees is not None or max_employees is not None:
+        emp: dict[str, int] = {}
+        if min_employees is not None:
+            emp["$gte"] = min_employees
+        if max_employees is not None:
+            emp["$lte"] = max_employees
+        f["employees_count"] = emp
+    if hiring is not None:
+        f["hiring"] = hiring
+    if headcount_increasing is not None:
+        f["headcount_increasing"] = headcount_increasing
+    return f or None
 
-    companies_text = "\n".join(company_lines)
 
-    msg = await _anthropic.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=4096,
-        tools=[_SCORE_TOOL],
-        tool_choice={"type": "tool", "name": "rank_companies"},
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"Seller context: {domain_context[:500] or 'Not available'}\n\n"
-                    f"Target ICP: {icp_prompt}\n\n"
-                    "Rate each company below for ICP fit (0–100). "
-                    "Format: company_key | name | domain | industry | size | country [| description]\n\n"
-                    f"{companies_text}"
-                ),
-            }
-        ],
-    )
+async def _fetch_companies_by_keys(keys: list[str]) -> dict[str, dict]:
+    """Fetch enriched company data from Snowflake by company_key list."""
+    if not keys:
+        return {}
 
-    score_map: dict[str, int] = {}
-    for block in msg.content:
-        if block.type == "tool_use" and block.name == "rank_companies":
-            for item in block.input.get("rankings", []):
-                score_map[item["company_key"]] = item["icp_score"]
+    placeholders = ", ".join(f"%(key_{i})s" for i in range(len(keys)))
+    params: dict[str, Any] = {f"key_{i}": k for i, k in enumerate(keys)}
 
-    # Attach scores and sort descending
-    scored = []
-    for c in companies:
-        key = c.get("company_key", "")
-        c["icp_score"] = score_map.get(key, 50)
-        scored.append(c)
+    query = f"""  # noqa: S608
+        SELECT
+            COMPANY_KEY,
+            COMPANY_NAME,
+            COMPANY_DOMAIN,
+            COMPANY_COUNTRY_CODE,
+            COMPANY_EMPLOYEES_COUNT,
+            COMPANY_LINKEDIN_INDUSTRY,
+            COMPANY_LINKEDIN_UNIVERSAL_NAME,
+            COMPANY_LINKEDIN_ID,
+            HIRING,
+            HEADCOUNT_IS_INCREASING
+        FROM dbt_db.models_final.final_companies_flatten
+        WHERE COMPANY_KEY IN ({placeholders})
+    """
 
-    return sorted(scored, key=lambda x: x["icp_score"], reverse=True)
+    pool = get_pool()
+    rows = await pool.execute(query, params)
+
+    result: dict[str, dict] = {}
+    for row in rows:
+        key = row.get("COMPANY_KEY")
+        if not key:
+            continue
+        universal_name = row.get("COMPANY_LINKEDIN_UNIVERSAL_NAME")
+        linkedin_id = row.get("COMPANY_LINKEDIN_ID")
+        linkedin_url: str | None = None
+        if universal_name:
+            linkedin_url = f"https://www.linkedin.com/company/{universal_name}"
+        elif linkedin_id:
+            linkedin_url = f"https://www.linkedin.com/company/{linkedin_id}"
+        result[key] = {
+            "company_key": key,
+            "name": row.get("COMPANY_NAME") or "",
+            "domain": row.get("COMPANY_DOMAIN") or "",
+            "country": row.get("COMPANY_COUNTRY_CODE") or "",
+            "employees_count": row.get("COMPANY_EMPLOYEES_COUNT"),
+            "industry": row.get("COMPANY_LINKEDIN_INDUSTRY") or "",
+            "linkedin_url": linkedin_url,
+        }
+    return result
+
+
+def _score_to_pct(score: float) -> int:
+    """Map Pinecone cosine score [_MIN_SEMANTIC_SCORE, 1.0] → [0, 100]."""
+    clamped = max(_MIN_SEMANTIC_SCORE, min(1.0, score))
+    return round((clamped - _MIN_SEMANTIC_SCORE) / (1.0 - _MIN_SEMANTIC_SCORE) * 100)
 
 
 def _format_company(c: dict[str, Any]) -> dict[str, Any]:
-    """Normalise a raw Scala company dict into the frontend table row format."""
-    name = c.get("cleaned_name") or c.get("name") or ""
-    domain = c.get("domain") or ""
-    linkedin_url = c.get("linkedin_url") or (
-        f"https://www.linkedin.com/company/{c['linkedin_universal_name']}"
-        if c.get("linkedin_universal_name")
-        else None
-    )
+    emp = c.get("employees_count")
     return {
         "company_key": c.get("company_key", ""),
-        "name": name,
-        "domain": domain,
-        "linkedin_url": linkedin_url,
-        "industry": c.get("gpt_industry") or c.get("linkedin_industry") or "",
-        "size": c.get("employees_range") or (str(c["employees_count"]) if c.get("employees_count") else ""),
-        "country": c.get("country_code") or "",
-        "icp_score": c.get("icp_score", 50),
+        "name": c.get("name") or "",
+        "domain": c.get("domain") or "",
+        "linkedin_url": c.get("linkedin_url"),
+        "industry": c.get("industry") or "",
+        "size": str(emp) if emp is not None else "",
+        "country": c.get("country") or "",
+        "icp_score": c.get("icp_score", 0),
     }
 
 
 async def run(
     user_domain: str,
     icp_prompt: str,
-) -> AsyncGenerator[dict[str, str], None]:
-    """Run the Company List agent. Yields SSE event dicts {event, data}."""
+) -> AsyncGenerator[dict[str, str]]:
+    """Run the Company List agent. Yields SSE event dicts {event, data}.
+
+    The user's domain is used ONLY to understand what the seller offers.
+    It is never used to find look-alike companies.
+    """
 
     def _status(message: str, detail: str = "") -> dict[str, str]:
         return {"event": "status", "data": json.dumps({"message": message, "detail": detail})}
@@ -227,72 +230,124 @@ async def run(
     yield _status(f"🔍 Analyzing {user_domain}...")
     domain_context = await scrape_domain(user_domain)
 
-    yield _status("🔍 Building search filters from your ICP criteria...")
-    filters = await _extract_filters(domain_context, icp_prompt)
-    logger.info("company_list_filters", filters=filters)
+    yield _status("🔍 Building search parameters from your ICP criteria...")
+    params = await _extract_icp_params(domain_context, icp_prompt)
+    semantic_query = params.get("semantic_query") or icp_prompt
+    logger.info("company_list_icp_params", params=params)
 
-    industry_hint = ""
-    if filters.get("company_linkedin_industries"):
-        industry_hint = filters["company_linkedin_industries"][0]
-    elif filters.get("company_gpt_industries"):
-        industry_hint = filters["company_gpt_industries"][0]
+    metadata_filter = _build_pinecone_filter(
+        country=params.get("country"),
+        industry=params.get("industry"),
+        min_employees=params.get("min_employees"),
+        max_employees=params.get("max_employees"),
+        hiring=params.get("hiring"),
+        headcount_increasing=params.get("headcount_increasing"),
+    )
+
+    filter_desc = ""
+    if params.get("country"):
+        filter_desc += f" · {params['country']}"
+    if params.get("min_employees") or params.get("max_employees"):
+        lo = params.get("min_employees", 0)
+        hi = params.get("max_employees")
+        filter_desc += f" · {lo}-{hi or '∞'} employees"
 
     yield _status(
         "🔍 Searching our database for matching companies...",
-        f"Applying ICP criteria{': ' + industry_hint if industry_hint else ''}",
+        f"Semantic search{filter_desc}",
     )
 
     try:
-        raw_companies = await search_companies(filters, sample_size=80)
+        pinecone_hits = await pinecone_search(
+            query_text=semantic_query,
+            top_k=200,
+            metadata_filter=metadata_filter,
+        )
     except Exception:
-        logger.exception("scala_search_failed")
-        yield {"event": "error", "data": json.dumps({"message": "Database search failed. Please try again."})}
-        return
-
-    if not raw_companies:
+        logger.exception("pinecone_search_failed")
         yield {
             "event": "error",
-            "data": json.dumps({
-                "message": "No companies found matching your criteria.",
-                "hint": "Try broadening your description or changing the target region.",
-            }),
+            "data": json.dumps({"message": "Database search failed. Please try again."}),
+        }
+        return
+
+    pinecone_hits = [h for h in pinecone_hits if h.get("score", 0) >= _MIN_SEMANTIC_SCORE]
+
+    if not pinecone_hits:
+        yield {
+            "event": "error",
+            "data": json.dumps(
+                {
+                    "message": "No companies found matching your criteria.",
+                    "hint": "Try broadening your description or changing the target region.",
+                }
+            ),
         }
         return
 
     yield _status(
-        "🔍 Scoring + filtering results...",
-        f"Found {len(raw_companies)} candidates",
+        "🔍 Enriching results with detailed company data...",
+        f"Found {len(pinecone_hits)} semantic matches",
     )
-    scored = await _score_companies(raw_companies, icp_prompt, domain_context)
 
-    top_50 = scored[:50]
-    yield _status(f"⚡ Ranking {len(top_50)} accounts by ICP fit...")
+    keys = [h["company_key"] for h in pinecone_hits if h.get("company_key")]
+    enrichment: dict[str, dict] = {}
+    try:
+        enrichment = await _fetch_companies_by_keys(keys)
+    except Exception:
+        logger.exception("snowflake_enrichment_failed")
 
-    companies = [_format_company(c) for c in top_50]
+    companies: list[dict] = []
+    for hit in pinecone_hits:
+        key = hit.get("company_key") or ""
+        score = hit.get("score", 0.0)
+        if key and key in enrichment:
+            c = dict(enrichment[key])
+            c["icp_score"] = _score_to_pct(score)
+            c["pinecone_score"] = score
+        else:
+            c = {
+                "company_key": key,
+                "name": hit.get("name") or "",
+                "domain": hit.get("domain") or "",
+                "country": hit.get("country") or "",
+                "employees_count": hit.get("employees_count"),
+                "industry": hit.get("industry") or "",
+                "linkedin_url": None,
+                "icp_score": _score_to_pct(score),
+                "pinecone_score": score,
+            }
+        companies.append(c)
 
-    # Build broaden suggestions if fewer than 50
+    companies.sort(key=lambda x: x.get("pinecone_score", 0), reverse=True)
+    top_results = companies[:_TOP_N]
+
+    yield _status(f"⚡ Ranking {len(top_results)} accounts by ICP fit...")
+
+    formatted = [_format_company(c) for c in top_results]
+
     broaden: list[dict[str, str]] = []
-    if len(top_50) < 50:
-        broaden = _build_broaden_suggestions(filters)
+    if len(top_results) < _TOP_N:
+        broaden = _build_broaden_suggestions(params)
 
     yield {
         "event": "result",
-        "data": json.dumps({
-            "companies": companies,
-            "total_found": len(top_50),
-            "broaden_suggestions": broaden,
-        }),
+        "data": json.dumps(
+            {
+                "companies": formatted,
+                "total_found": len(top_results),
+                "broaden_suggestions": broaden,
+            }
+        ),
     }
 
 
-def _build_broaden_suggestions(
-    filters: dict[str, Any],
-) -> list[dict[str, str]]:
+def _build_broaden_suggestions(params: dict[str, Any]) -> list[dict[str, str]]:
     suggestions = []
-    if filters.get("company_employee_count_min") or filters.get("company_employee_count_max"):
+    if params.get("min_employees") or params.get("max_employees"):
         suggestions.append({"label": "Remove size filter →", "hint": "~+18 more companies"})
-    if filters.get("company_country_codes") and len(filters["company_country_codes"]) <= 2:
+    if params.get("country"):
         suggestions.append({"label": "Expand to more countries →", "hint": "~+25 more companies"})
-    if filters.get("company_linkedin_industries") and len(filters["company_linkedin_industries"]) <= 2:
+    if params.get("industry"):
         suggestions.append({"label": "Broaden industry criteria →", "hint": "~+12 more companies"})
     return suggestions[:3]

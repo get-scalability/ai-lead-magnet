@@ -13,9 +13,7 @@ import app.gate.models  # noqa: F401
 config = context.config
 
 # psycopg3 sync driver for migrations (no greenlet needed)
-sync_url = str(settings.DATABASE_URL).replace(
-    "postgresql+psycopg://", "postgresql+psycopg://", 1
-)
+sync_url = str(settings.DATABASE_URL).replace("postgresql+psycopg://", "postgresql+psycopg://", 1)
 config.set_main_option("sqlalchemy.url", sync_url)
 
 if config.config_file_name is not None:

@@ -29,7 +29,7 @@ app = FastAPI(
 )
 
 app.add_middleware(
-    CORSMiddleware,
+    CORSMiddleware,  # type: ignore[arg-type]
     allow_origins=["*"],  # tightened to getscalability.io before production
     allow_methods=["GET", "POST"],
     allow_headers=["*"],

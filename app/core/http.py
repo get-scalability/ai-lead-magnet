@@ -1,5 +1,5 @@
-import httpx
 from bs4 import BeautifulSoup
+import httpx
 
 
 _SCRAPE_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ScalabilityBot/1.0)"}
@@ -21,5 +21,5 @@ async def scrape_domain(domain: str) -> str:
             for tag in soup(["script", "style", "nav", "footer", "header"]):
                 tag.decompose()
             return soup.get_text(separator=" ", strip=True)[:_SCRAPE_CHAR_LIMIT]
-    except Exception:
+    except Exception:  # noqa: BLE001
         return ""

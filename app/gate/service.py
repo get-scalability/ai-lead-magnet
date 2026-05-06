@@ -1,5 +1,5 @@
-import hashlib
 from datetime import UTC, datetime
+import hashlib
 
 import httpx
 from sqlalchemy import select
@@ -64,7 +64,9 @@ async def push_to_crm(payload: dict) -> None:
             await client.post(
                 f"{settings.SCALA_CRM_API_URL}leads",
                 json=payload,
-                headers={"Authorization": f"Bearer {settings.SCALA_APP_API_KEY.get_secret_value()}"},
+                headers={
+                    "Authorization": f"Bearer {settings.SCALA_APP_API_KEY.get_secret_value()}"
+                },
             )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning("crm_push_failed", tool=payload.get("tool_used"))

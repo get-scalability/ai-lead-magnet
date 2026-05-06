@@ -1,8 +1,9 @@
 """SSE endpoint for the Company List agent."""
 
-import json
-import uuid
 from collections.abc import AsyncGenerator
+import json
+from typing import Annotated
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
@@ -33,7 +34,7 @@ class RunRequest(BaseModel):
 @router.post("/stream")
 async def stream(
     req: RunRequest,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> EventSourceResponse:
     allowed, _ = await check_rate_limit(db, req.email, TOOL_SLUG)
     if not allowed:
@@ -46,7 +47,7 @@ async def stream(
     # and survives client disconnects mid-stream.
     await increment_run(db, req.email, TOOL_SLUG)
 
-    async def generate() -> AsyncGenerator[dict[str, str], None]:
+    async def generate() -> AsyncGenerator[dict[str, str]]:
         result_data: dict | None = None
 
         async for event in agent.run(req.domain, req.icp_prompt):
@@ -69,24 +70,26 @@ async def stream(
                 "data": json.dumps({"public_id": str(result_row.public_id)}),
             }
 
-            await push_to_crm({
-                "email": req.email,
-                "tool_used": TOOL_SLUG,
-                "tool_input_summary": f"domain: {req.domain}",
-                "icp_prompt": req.icp_prompt,
-                "company_domain": req.domain,
-                "results_count": result_data.get("total_found", 0),
-            })
+            await push_to_crm(
+                {
+                    "email": req.email,
+                    "tool_used": TOOL_SLUG,
+                    "tool_input_summary": f"domain: {req.domain}",
+                    "icp_prompt": req.icp_prompt,
+                    "company_domain": req.domain,
+                    "results_count": result_data.get("total_found", 0),
+                }
+            )
 
     return EventSourceResponse(generate())
 
 
 @router.get("/result/{public_id}")
-async def get_result(public_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+async def get_result(public_id: str, db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
     try:
         uid = uuid.UUID(public_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid public_id")
+        raise HTTPException(status_code=400, detail="Invalid public_id") from None
 
     row = await db.scalar(
         select(LeadMagnetResult).where(
