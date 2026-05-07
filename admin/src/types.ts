@@ -1,4 +1,4 @@
-export type AppPhase = 'done' | 'error' | 'idle' | 'loading'
+export type AppPhase = 'done' | 'error' | 'idle' | 'loading' | 'rate_limited'
 
 export type Company = {
   country: string
@@ -10,8 +10,13 @@ export type Company = {
   size: string
 }
 
+export type BroadenSuggestion = {
+  hint: string
+  label: string
+}
+
 export type RunResult = {
-  broaden_suggestions: string[]
+  broaden_suggestions: BroadenSuggestion[]
   companies: Company[]
   total_found: number
 }

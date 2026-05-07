@@ -170,7 +170,7 @@ async def _fetch_companies_by_keys(keys: list[str]) -> dict[str, dict]:
     placeholders = ", ".join(f"%(key_{i})s" for i in range(len(keys)))
     params: dict[str, Any] = {f"key_{i}": k for i, k in enumerate(keys)}
 
-    query = f"""  # noqa: S608
+    query = f"""
         SELECT
             COMPANY_KEY,
             COMPANY_NAME,

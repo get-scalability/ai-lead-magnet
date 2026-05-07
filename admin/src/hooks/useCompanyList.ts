@@ -6,14 +6,16 @@ export type UseCompanyListReturn = {
   error: string | null
   phase: AppPhase
   publicId: string | null
+  rateLimitResetOn: string | null
   result: RunResult | null
-  run: (email: string, domain: string, icpPrompt: string) => Promise<void>
+  run: (email: string, firstName: string | null, domain: string, icpPrompt: string) => Promise<void>
   statusMessages: StatusMessage[]
 }
 
 type SseCallbacks = {
   onDone: (publicId: string) => void
   onError: (message: string) => void
+  onRateLimit: (resetOn: string) => void
   onResult: (result: RunResult) => void
   onStatus: (message: StatusMessage) => void
 }
@@ -21,6 +23,7 @@ type SseCallbacks = {
 type RunRequest = {
   domain: string
   email: string
+  first_name: string | null
   icp_prompt: string
 }
 
@@ -96,7 +99,12 @@ async function streamRun(req: RunRequest, callbacks: SseCallbacks): Promise<void
   }
 
   if (response.status === HTTP_RATE_LIMIT) {
-    callbacks.onError('Monthly limit reached (3 runs / month). Try again next month.')
+    let resetOn = 'next month'
+    try {
+      const body = await response.json() as { detail?: { reset_on?: string } }
+      if (body?.detail?.reset_on) resetOn = body.detail.reset_on
+    } catch { /* ignore */ }
+    callbacks.onRateLimit(resetOn)
     return
   }
 
@@ -115,27 +123,32 @@ export function useCompanyList(): UseCompanyListReturn {
   const [result, setResult] = useState<RunResult | null>(null)
   const [publicId, setPublicId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [rateLimitResetOn, setRateLimitResetOn] = useState<string | null>(null)
 
-  const run = useCallback(async (email: string, domain: string, icpPrompt: string) => {
-    setPhase('loading')
-    setStatusMessages([])
-    setResult(null)
-    setPublicId(null)
-    setError(null)
+  const run = useCallback(
+    async (email: string, firstName: string | null, domain: string, icpPrompt: string) => {
+      setPhase('loading')
+      setStatusMessages([])
+      setResult(null)
+      setPublicId(null)
+      setError(null)
+      setRateLimitResetOn(null)
 
-    await streamRun(
-      { domain, email, icp_prompt: icpPrompt },
-      {
-        onDone: (id) => { setPublicId(id); setPhase('done') },
-        onError: (msg) => { setError(msg); setPhase('error') },
-        onResult: setResult,
-        onStatus: (msg) => setStatusMessages((prev) => [...prev, msg]),
-      },
-    )
+      await streamRun(
+        { domain, email, first_name: firstName, icp_prompt: icpPrompt },
+        {
+          onDone: (id) => { setPublicId(id); setPhase('done') },
+          onError: (msg) => { setError(msg); setPhase('error') },
+          onRateLimit: (resetOn) => { setRateLimitResetOn(resetOn); setPhase('rate_limited') },
+          onResult: setResult,
+          onStatus: (msg) => setStatusMessages((prev) => [...prev, msg]),
+        },
+      )
 
-    // Fallback in case stream closes without a done/error event
-    setPhase((prev) => (prev === 'loading' ? 'done' : prev))
-  }, [])
+      setPhase((prev) => (prev === 'loading' ? 'done' : prev))
+    },
+    [],
+  )
 
-  return { error, phase, publicId, result, run, statusMessages }
+  return { error, phase, publicId, rateLimitResetOn, result, run, statusMessages }
 }

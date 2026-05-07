@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 import csv
+from datetime import UTC, date, datetime
 import io
 import json
 from typing import Annotated
@@ -28,8 +29,17 @@ router = APIRouter(prefix="/agents/company-list", tags=["company-list"])
 TOOL_SLUG = "company_list"
 
 
+def _next_reset_date() -> str:
+    today = date.today()
+    first_next = (
+        date(today.year + 1, 1, 1) if today.month == 12 else date(today.year, today.month + 1, 1)
+    )
+    return first_next.strftime("%B %d")
+
+
 class RunRequest(BaseModel):
     email: EmailStr
+    first_name: str | None = None
     domain: str
     icp_prompt: str
 
@@ -43,7 +53,7 @@ async def stream(
     if not allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Monthly run limit reached. Try again next month.",
+            detail={"message": "Monthly limit reached.", "reset_on": _next_reset_date()},
         )
 
     # Increment before streaming — prevents double-spend on concurrent requests
@@ -76,11 +86,13 @@ async def stream(
             await push_to_crm(
                 {
                     "email": req.email,
+                    "first_name": req.first_name,
                     "tool_used": TOOL_SLUG,
                     "tool_input_summary": f"domain: {req.domain}",
                     "icp_prompt": req.icp_prompt,
                     "company_domain": req.domain,
                     "results_count": result_data.get("total_found", 0),
+                    "created_at": datetime.now(UTC).isoformat(),
                 }
             )
 

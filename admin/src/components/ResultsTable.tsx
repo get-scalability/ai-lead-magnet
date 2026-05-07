@@ -1,6 +1,6 @@
 import { IcpScoreBadge } from './IcpScoreBadge'
 
-import type { Company, RunResult } from '../types'
+import type { BroadenSuggestion, Company, RunResult } from '../types'
 
 type ResultsTableProps = {
   publicId: string | null
@@ -79,8 +79,15 @@ export function ResultsTable({ publicId, result }: ResultsTableProps) {
 
       {result.broaden_suggestions.length > 0 && (
         <div className="mb-4 p-3 bg-ag-bg-secondary border border-ag-border rounded-lg text-xs text-ag-text-secondary">
-          <span className="font-medium">Suggestions to broaden your search: </span>
-          {result.broaden_suggestions.join(' · ')}
+          <p className="font-medium mb-2">💡 Want more results?</p>
+          <div className="flex flex-wrap gap-2">
+            {result.broaden_suggestions.map((s: BroadenSuggestion, i: number) => (
+              <span key={i} className="inline-flex items-center gap-1.5 border border-ag-border rounded-md px-2.5 py-1 bg-white">
+                <span className="text-ag-text-primary">{s.label}</span>
+                <span className="text-ag-text-muted">{s.hint}</span>
+              </span>
+            ))}
+          </div>
         </div>
       )}
 

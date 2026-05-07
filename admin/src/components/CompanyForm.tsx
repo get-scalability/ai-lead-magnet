@@ -3,7 +3,7 @@ import { type FormEvent, useState } from 'react'
 import type { AppPhase } from '../types'
 
 type CompanyFormProps = {
-  onSubmit: (email: string, domain: string, icpPrompt: string) => void
+  onSubmit: (email: string, firstName: string | null, domain: string, icpPrompt: string) => void
   phase: AppPhase
 }
 
@@ -16,6 +16,7 @@ const labelClass = 'block text-xs font-medium text-ag-text-secondary uppercase t
 
 export function CompanyForm({ onSubmit, phase }: CompanyFormProps) {
   const [email, setEmail] = useState('')
+  const [firstName, setFirstName] = useState('')
   const [domain, setDomain] = useState('')
   const [icpPrompt, setIcpPrompt] = useState('')
 
@@ -29,7 +30,7 @@ export function CompanyForm({ onSubmit, phase }: CompanyFormProps) {
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!canSubmit) return
-    onSubmit(email.trim(), domain.trim(), icpPrompt.trim())
+    onSubmit(email.trim(), firstName.trim() || null, domain.trim(), icpPrompt.trim())
   }
 
   return (
@@ -48,17 +49,32 @@ export function CompanyForm({ onSubmit, phase }: CompanyFormProps) {
           />
         </div>
         <div>
-          <label className={labelClass}>Your company domain</label>
+          <label className={labelClass}>
+            First name{' '}
+            <span className="font-normal normal-case text-ag-text-muted">(optional)</span>
+          </label>
           <input
             className={inputClass}
             disabled={isLoading}
-            onChange={(e) => setDomain(e.target.value)}
-            placeholder="company.com"
-            required
+            onChange={(e) => setFirstName(e.target.value)}
+            placeholder="Alex"
             type="text"
-            value={domain}
+            value={firstName}
           />
         </div>
+      </div>
+
+      <div>
+        <label className={labelClass}>Your company domain</label>
+        <input
+          className={inputClass}
+          disabled={isLoading}
+          onChange={(e) => setDomain(e.target.value)}
+          placeholder="company.com"
+          required
+          type="text"
+          value={domain}
+        />
       </div>
 
       <div>
@@ -85,6 +101,27 @@ export function CompanyForm({ onSubmit, phase }: CompanyFormProps) {
       >
         {isLoading ? 'Building your list…' : 'Build my list →'}
       </button>
+
+      <p className="text-xs text-center text-ag-text-muted">
+        By getting your results, you&apos;ll occasionally hear from Scalability.{' '}
+        <a
+          className="underline hover:text-ag-text-secondary transition-colors"
+          href="https://getscalability.io/unsubscribe"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Unsubscribe anytime
+        </a>
+        {' · '}
+        <a
+          className="underline hover:text-ag-text-secondary transition-colors"
+          href="https://getscalability.io/privacy"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Privacy policy
+        </a>
+      </p>
     </form>
   )
 }

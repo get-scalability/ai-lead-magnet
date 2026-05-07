@@ -21,7 +21,7 @@ function Header() {
 }
 
 export function App() {
-  const { error, phase, publicId, result, run, statusMessages } = useCompanyList()
+  const { error, phase, publicId, rateLimitResetOn, result, run, statusMessages } = useCompanyList()
 
   return (
     <div className="min-h-screen bg-ag-bg-primary px-4 py-12">
@@ -32,7 +32,12 @@ export function App() {
           <CompanyForm onSubmit={run} phase={phase} />
         </div>
 
-        <StatusLog error={error} messages={statusMessages} phase={phase} />
+        <StatusLog
+          error={error}
+          messages={statusMessages}
+          phase={phase}
+          rateLimitResetOn={rateLimitResetOn}
+        />
 
         {result && (
           <ResultsTable publicId={publicId} result={result} />
