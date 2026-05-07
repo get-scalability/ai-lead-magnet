@@ -1,8 +1,7 @@
 from collections.abc import AsyncGenerator
 
-import pytest
-import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+import pytest_asyncio
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -10,6 +9,7 @@ from app.api_main import app
 from app.core.database import get_db
 from app.core.settings import settings
 from app.gate.models import LeadMagnetResult, LeadMagnetRun
+
 
 _engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
 _SessionLocal = async_sessionmaker(_engine, expire_on_commit=False)

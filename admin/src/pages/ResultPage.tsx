@@ -110,16 +110,26 @@ function ResultView({ data }: { data: ResultData }) {
   return (
     <div className="min-h-screen bg-ag-bg-primary px-4 py-12">
       <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <p className="text-xs font-semibold text-ag-blue uppercase tracking-widest mb-3">
-            Scalability · AI Tools
-          </p>
-          <h1 className="text-2xl font-semibold text-ag-text-primary mb-1">
-            Company list for {data.input.domain}
-          </h1>
-          <p className="text-sm text-ag-text-secondary">
-            {companies.length} companies found · Generated {createdAt}
-          </p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold text-ag-blue uppercase tracking-widest mb-3">
+              Scalability · AI Tools
+            </p>
+            <h1 className="text-2xl font-semibold text-ag-text-primary mb-1">
+              Company list for {data.input.domain}
+            </h1>
+            <p className="text-sm text-ag-text-secondary">
+              {companies.length} companies found · Generated {createdAt}
+            </p>
+          </div>
+          <a
+            className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-ag-text-secondary
+              border border-ag-border rounded-lg px-3 py-1.5 hover:border-ag-blue hover:text-ag-blue
+              transition-colors mt-1"
+            href={`/agents/company-list/result/${data.public_id}/csv`}
+          >
+            ↓ Download CSV
+          </a>
         </div>
 
         {data.output.broaden_suggestions.length > 0 && (

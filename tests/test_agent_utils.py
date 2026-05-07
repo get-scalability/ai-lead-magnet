@@ -27,7 +27,9 @@ class TestBuildPineconeFilter:
         assert f == {"employees_count": {"$gte": 50, "$lte": 500}}
 
     def test_industries(self) -> None:
-        f = _build_pinecone_filter(industries=["Software Development", "IT Services and IT Consulting"])
+        f = _build_pinecone_filter(
+            industries=["Software Development", "IT Services and IT Consulting"]
+        )
         assert f == {"industry": {"$in": ["Software Development", "IT Services and IT Consulting"]}}
 
     def test_hiring_true(self) -> None:
@@ -125,11 +127,13 @@ class TestBuildBroadenSuggestions:
         assert len(result) == 1
 
     def test_all_filters_capped_at_three(self) -> None:
-        result = _build_broaden_suggestions({
-            "country": "FR",
-            "min_employees": 50,
-            "industries": ["Software Development"],
-        })
+        result = _build_broaden_suggestions(
+            {
+                "country": "FR",
+                "min_employees": 50,
+                "industries": ["Software Development"],
+            }
+        )
         assert len(result) == 3
 
     def test_suggestions_have_label_and_hint(self) -> None:

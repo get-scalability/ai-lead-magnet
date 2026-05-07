@@ -29,10 +29,15 @@ router = APIRouter(prefix="/agents/company-list", tags=["company-list"])
 TOOL_SLUG = "company_list"
 
 
+_DECEMBER = 12
+
+
 def _next_reset_date() -> str:
-    today = date.today()
+    today = datetime.now(tz=UTC).date()
     first_next = (
-        date(today.year + 1, 1, 1) if today.month == 12 else date(today.year, today.month + 1, 1)
+        date(today.year + 1, 1, 1)
+        if today.month == _DECEMBER
+        else date(today.year, today.month + 1, 1)
     )
     return first_next.strftime("%B %d")
 

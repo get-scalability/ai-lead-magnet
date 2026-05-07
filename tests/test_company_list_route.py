@@ -1,8 +1,9 @@
+import contextlib
 import json
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from httpx import AsyncClient
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,10 +61,8 @@ def _parse_sse(text: str) -> list[dict]:
         if line.startswith("event: "):
             event_type = line[7:].strip()
         elif line.startswith("data: "):
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 events.append({"event": event_type, "data": json.loads(line[6:].strip())})
-            except json.JSONDecodeError:
-                pass
             event_type = ""
     return events
 
