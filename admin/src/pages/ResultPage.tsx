@@ -202,7 +202,7 @@ export function ResultPage() {
     }
     fetch(`/agents/company-list/result/${publicId}`)
       .then((r) => {
-        if (r.status === 404) throw new Error('This result has expired or doesn't exist.')
+        if (r.status === 404) throw new Error("This result has expired or doesn't exist.")
         if (!r.ok) throw new Error('Failed to load result.')
         return r.json() as Promise<ResultData>
       })
