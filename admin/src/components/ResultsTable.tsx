@@ -46,7 +46,7 @@ function EmptyCell({ value }: { value: string }) {
 
 export function ResultsTable({ publicId, result }: ResultsTableProps) {
   const csvUrl = publicId ? `${CSV_ENDPOINT}/${publicId}/csv` : null
-  const permalinkUrl = publicId ? `${CSV_ENDPOINT}/${publicId}` : null
+  const permalinkUrl = publicId ? `/r/${publicId}` : null
 
   return (
     <div className="mt-8">
