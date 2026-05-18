@@ -110,7 +110,7 @@ function ResultView({ data }: { data: ResultData }) {
   return (
     <div className="min-h-screen bg-ag-bg-primary px-4 py-12">
       <div className="max-w-3xl mx-auto">
-        <div className="mb-8 flex items-start justify-between gap-4">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold text-ag-blue uppercase tracking-widest mb-3">
               Scalability · AI Tools
@@ -130,6 +130,15 @@ function ResultView({ data }: { data: ResultData }) {
           >
             ↓ Download CSV
           </a>
+        </div>
+
+        <div className="mb-6 p-4 bg-white border border-ag-border rounded-xl">
+          <p className="text-xs font-medium text-ag-text-muted uppercase tracking-wide mb-1.5">
+            ICP prompt
+          </p>
+          <p className="text-sm text-ag-text-secondary leading-relaxed">
+            {data.input.icp_prompt}
+          </p>
         </div>
 
         {data.output.broaden_suggestions.length > 0 && (

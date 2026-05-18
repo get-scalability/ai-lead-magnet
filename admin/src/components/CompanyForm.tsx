@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 
 import type { AppPhase } from '../types'
 
@@ -14,11 +14,46 @@ const inputClass =
 
 const labelClass = 'block text-xs font-medium text-ag-text-secondary uppercase tracking-wide mb-1.5'
 
+const GENERIC_PROVIDERS = new Set([
+  'gmail.com', 'googlemail.com',
+  'outlook.com', 'outlook.fr', 'hotmail.com', 'hotmail.fr', 'hotmail.co.uk',
+  'live.com', 'live.fr', 'msn.com',
+  'yahoo.com', 'yahoo.fr', 'yahoo.co.uk',
+  'orange.fr', 'wanadoo.fr', 'sfr.fr', 'free.fr', 'laposte.net',
+  'icloud.com', 'me.com', 'mac.com',
+  'aol.com', 'protonmail.com', 'proton.me',
+])
+
+function extractDomain(email: string): string | null {
+  const at = email.lastIndexOf('@')
+  if (at === -1) return null
+  const domain = email.slice(at + 1).toLowerCase()
+  return GENERIC_PROVIDERS.has(domain) ? null : domain
+}
+
 export function CompanyForm({ onSubmit, phase }: CompanyFormProps) {
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
   const [domain, setDomain] = useState('')
   const [icpPrompt, setIcpPrompt] = useState('')
+  const domainAutoFilled = useRef(false)
+
+  function handleEmailChange(value: string) {
+    setEmail(value)
+    const extracted = extractDomain(value)
+    if (extracted && (domain === '' || domainAutoFilled.current)) {
+      setDomain(extracted)
+      domainAutoFilled.current = true
+    } else if (!extracted && domainAutoFilled.current) {
+      setDomain('')
+      domainAutoFilled.current = false
+    }
+  }
+
+  function handleDomainChange(value: string) {
+    domainAutoFilled.current = false
+    setDomain(value)
+  }
 
   const isLoading = phase === 'loading'
   const canSubmit =
@@ -41,7 +76,7 @@ export function CompanyForm({ onSubmit, phase }: CompanyFormProps) {
           <input
             className={inputClass}
             disabled={isLoading}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => handleEmailChange(e.target.value)}
             placeholder="you@company.com"
             required
             type="email"
@@ -69,7 +104,7 @@ export function CompanyForm({ onSubmit, phase }: CompanyFormProps) {
         <input
           className={inputClass}
           disabled={isLoading}
-          onChange={(e) => setDomain(e.target.value)}
+          onChange={(e) => handleDomainChange(e.target.value)}
           placeholder="company.com"
           required
           type="text"
