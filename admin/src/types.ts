@@ -1,5 +1,12 @@
 export type AppPhase = 'done' | 'error' | 'idle' | 'loading' | 'rate_limited'
 
+export type RunParams = {
+  domain: string
+  email: string
+  firstName: string | null
+  icpPrompt: string
+}
+
 export type Company = {
   country: string
   domain: string | null

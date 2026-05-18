@@ -1,9 +1,9 @@
 import { type FormEvent, useRef, useState } from 'react'
 
-import type { AppPhase } from '../types'
+import type { AppPhase, RunParams } from '../types'
 
 type CompanyFormProps = {
-  onSubmit: (email: string, firstName: string | null, domain: string, icpPrompt: string) => void
+  onSubmit: (params: RunParams) => void
   phase: AppPhase
 }
 
@@ -65,7 +65,12 @@ export function CompanyForm({ onSubmit, phase }: CompanyFormProps) {
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!canSubmit) return
-    onSubmit(email.trim(), firstName.trim() || null, domain.trim(), icpPrompt.trim())
+    onSubmit({
+      domain: domain.trim(),
+      email: email.trim(),
+      firstName: firstName.trim() || null,
+      icpPrompt: icpPrompt.trim(),
+    })
   }
 
   return (

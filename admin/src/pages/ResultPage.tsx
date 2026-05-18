@@ -17,6 +17,8 @@ type PageState =
   | { status: 'loaded'; data: ResultData }
 
 const VISIBLE_ROWS = 10
+const BLUR_PREVIEW_ROWS = 4
+const HTTP_NOT_FOUND = 404
 
 const thClass =
   'text-left text-xs font-medium text-ag-text-muted uppercase tracking-wide px-4 py-3'
@@ -73,7 +75,7 @@ function BlurGate({ hidden }: { hidden: Company[] }) {
     <div className="relative border border-t-0 border-ag-border rounded-b-lg overflow-hidden">
       <table className="w-full text-sm border-collapse pointer-events-none select-none">
         <tbody className="[filter:blur(3px)]">
-          {hidden.slice(0, 4).map((company, i) => (
+          {hidden.slice(0, BLUR_PREVIEW_ROWS).map((company, i) => (
             <CompanyRow key={i} company={company} />
           ))}
         </tbody>
@@ -211,7 +213,7 @@ export function ResultPage() {
     }
     fetch(`/agents/company-list/result/${publicId}`)
       .then((r) => {
-        if (r.status === 404) throw new Error("This result has expired or doesn't exist.")
+        if (r.status === HTTP_NOT_FOUND) throw new Error("This result has expired or doesn't exist.")
         if (!r.ok) throw new Error('Failed to load result.')
         return r.json() as Promise<ResultData>
       })

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-import type { AppPhase, RunResult, StatusMessage } from '../types'
+import type { AppPhase, RunParams, RunResult, StatusMessage } from '../types'
 
 export type UseCompanyListReturn = {
   error: string | null
@@ -8,7 +8,7 @@ export type UseCompanyListReturn = {
   publicId: string | null
   rateLimitResetOn: string | null
   result: RunResult | null
-  run: (email: string, firstName: string | null, domain: string, icpPrompt: string) => Promise<void>
+  run: (params: RunParams) => Promise<void>
   statusMessages: StatusMessage[]
 }
 
@@ -126,7 +126,7 @@ export function useCompanyList(): UseCompanyListReturn {
   const [rateLimitResetOn, setRateLimitResetOn] = useState<string | null>(null)
 
   const run = useCallback(
-    async (email: string, firstName: string | null, domain: string, icpPrompt: string) => {
+    async ({ domain, email, firstName, icpPrompt }: RunParams) => {
       setPhase('loading')
       setStatusMessages([])
       setResult(null)
