@@ -42,7 +42,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 RUN bun add @import-meta-env/cli@0.7.3
 
 # Copy nginx config and entrypoint
-COPY config/nginx.conf /etc/nginx/http.d/default.conf
+COPY config/nginx.conf /etc/nginx/http.d/default.conf.template
 COPY config/entrypoint-dist.sh /entrypoint.sh
 COPY .env.example .env.example
 
