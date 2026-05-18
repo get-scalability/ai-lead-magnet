@@ -15,12 +15,31 @@ x-app-ci: &app-ci
   env_file:
     - path: .env.template
 
+x-admin-dev: &admin-dev
+  build:
+    context: ./admin
+    target: dev
+  image: get-scalability/ai-lead-magnet/admin-dev
+  volumes:
+    - ./admin:/app
+
 x-admin-ci: &admin-ci
   image: get-scalability/ai-lead-magnet/admin-dev
   volumes:
     - ./admin:/app
 
 services:
+  admin:
+    <<: *admin-dev
+    environment:
+      API_PROXY_TARGET: http://api:8000
+    ports:
+      - "${ADMIN_PORT:-9601}:5173"
+    depends_on:
+      - api
+    profiles:
+      - ""
+
   api:
     <<: *app-dev
     restart: always
@@ -106,6 +125,8 @@ services:
       timeout: 3s
       retries: 5
     image: postgres:18.3-alpine
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
     profiles:
       - ""
     volumes:

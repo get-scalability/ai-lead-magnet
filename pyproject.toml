@@ -8,9 +8,12 @@ dependencies = [
     "anthropic>=0.40.0",
     "beautifulsoup4>=4.12.0",
     "ddtrace>=2.0.0",
+    "email-validator>=2.2.0",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
+    "cryptography>=42.0.0",
     "pinecone>=6.0.0",
+    "snowflake-connector-python>=3.0.0",
     "psycopg[binary]>=3.1.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.12.0",
@@ -89,6 +92,12 @@ split-on-trailing-comma = true
 [tool.ruff.lint.per-file-ignores]
 "app/alembic/*" = [
     "INP001",  # implicit-namespace-package (Alembic convention)
+]
+"app/agents/company_list/agent.py" = [
+    "S608",  # parameterized placeholders %(key_N)s are safe; not user-controlled
+]
+"app/api_main.py" = [
+    "E501",  # embedded HTML/CSS/JS strings exceed 100 chars by design
 ]
 "scripts/*" = [
     "INP001",

@@ -2,7 +2,7 @@ import ImportMetaEnvPlugin from '@import-meta-env/unplugin'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-const apiProxyTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:9602'
+const apiProxyTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:9610'
 
 export default defineConfig({
   plugins: [
@@ -12,13 +12,17 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': {
-        target: apiProxyTarget,
+      '/agents': {
         changeOrigin: true,
+        target: apiProxyTarget,
+      },
+      '/api': {
+        changeOrigin: true,
+        target: apiProxyTarget,
       },
       '/auth': {
-        target: apiProxyTarget,
         changeOrigin: true,
+        target: apiProxyTarget,
       },
     },
   },
